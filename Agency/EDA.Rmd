@@ -1,0 +1,29 @@
+---
+title: "Data"
+author: "Sumair Shah"
+date: "3/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(ggplot2)
+library(tidyr)
+library(baseballr)
+
+```
+
+```{r}
+# Using the package
+
+pitchers <- baseballr::fg_pitch_leaders(2016,2020,league = 'all',ind = 1) # Individual seasons
+
+career_pitcher <- baseballr::fg_pitch_leaders(2016,2020,league = "all",ind = 0)
+
+write.csv(pitchers, "pitchers.csv")
+
+write.csv(career_pitcher,"careerpitch.csv")
+
+```
