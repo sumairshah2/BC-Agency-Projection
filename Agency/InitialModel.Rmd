@@ -1,0 +1,152 @@
+---
+title: "EDA"
+author: "Sumair Shah"
+date: "3/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(skimr)
+library(tidymodels)
+library(usemodels)
+```
+```{r}
+
+pitchers <- read.csv("Data/pitchers.csv")
+careers <- read.csv("Data/careerpitch.csv")
+
+```
+
+```{r}
+
+# I want to visualize our enitre data set
+
+skimr::skim(pitchers)
+
+
+```
+## R Markdown
+
+
+```{r}
+
+ggplotly(pitchers %>% 
+  ggplot(aes(IP, WAR)) + geom_point())
+
+
+```
+
+```{r}
+
+ggplotly(pitchers %>% 
+  ggplot(aes(WHIP, WAR)) + geom_point())
+
+```
+
+library(corrplot)
+```{r}
+
+source("http://www.sthda.com/upload/rquery_cormat.r")
+
+scaled_data <- scale(pitchers %>% select(Age,W,L,ERA,G,GS,CG,IP,H,BB,HR,SO,K_BB,WHIP,GB_pct,WAR,Dollars,xFIP))
+
+scaled_data <- as.matrix(scaled_data)
+
+rquery.cormat(scaled_data)
+
+
+```
+```{r}
+set.seed(123)
+
+
+pitching_split <- initial_split(pitchers, strata = Season)
+pitching_train <- training(pitching_split)
+pitching_testing <- testing(pitching_split)
+
+```
+
+```{r}
+pitching_folds <- bootstraps(pitching_train,strata = Season)
+
+```
+
+```{r}
+library(usemodels)
+use_ranger(WAR~.,data = pitching_train)
+
+
+
+
+```
+```{r}
+ranger_recipe <- 
+  recipe(formula = WAR ~ Age + xFIP + IP + GS + SO, data = pitching_train) 
+
+ranger_spec <- 
+  rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>% 
+  set_mode("regression") %>% 
+  set_engine("ranger") 
+
+ranger_workflow <- 
+  workflow() %>% 
+  add_recipe(ranger_recipe) %>% 
+  add_model(ranger_spec) 
+
+set.seed(87111)
+ranger_tune <-
+  tune_grid(ranger_workflow, resamples = pitching_folds, grid = 10)
+
+show_best(ranger_tune,metric = "rsq")
+
+```
+```{r}
+autoplot(ranger_tune)
+
+
+```
+```{r}
+final_rf <- ranger_workflow %>% 
+  finalize_workflow(select_best(ranger_tune,metric = 'rsq'))
+
+last_fit <- last_fit(final_rf,pitching_split)
+
+```
+
+```{r}
+last_fit$.metrics[[1]]
+
+
+```
+```{r}
+ggplotly(collect_predictions(last_fit) %>% 
+ggplot(aes(WAR,.pred)) +
+  geom_abline(lty = 2, color = "gray50")+
+  geom_point(alpha = 0.5, color = "midnightblue") +
+  coord_fixed())
+
+```
+
+```{r}
+library(vip)
+
+imp_spec <- ranger_spec %>% 
+  finalize_model(select_best(ranger_tune)) %>% 
+  set_engine("ranger",importance = "permutation")
+
+```
+```{r}
+workflow() %>%
+  add_recipe(ranger_recipe) %>%
+  add_model(imp_spec) %>%
+  fit(pitching_train) %>%
+  pull_workflow_fit() %>%
+  vip(aesthetics = list(alpha = 0.8, fill = "midnightblue"))
+
+```
+
